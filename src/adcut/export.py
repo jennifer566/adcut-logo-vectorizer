@@ -1,4 +1,6 @@
-"""Export explicit CAD geometry without approximating circles with short lines."""
+"""Export SVG paths as physical SVG and native DXF curve entities."""
+
+from __future__ import annotations
 
 import math
 from dataclasses import dataclass
@@ -6,8 +8,12 @@ from io import StringIO
 from xml.etree import ElementTree
 
 import ezdxf
+from ezdxf.path import Path as DXFPath
+from ezdxf.path import render_splines_and_polylines
+from svgelements import Arc, Close, CubicBezier, Line, Move, QuadraticBezier
+from svgelements import Path as SVGPath
 
-from adcut.pipeline import VectorizationResult
+from adcut.pipeline import PathLoop, VectorizationResult
 
 
 @dataclass(frozen=True)
@@ -18,11 +24,7 @@ class Circle:
 
 
 def export_circles(circles: list[Circle], *, units: int, version: str = "R2000") -> str:
-    """Export caller-supplied geometry. Coordinates must already use the requested units.
-
-    R2000 is a development default, not a confirmed Adcut requirement.
-    This function does not infer scale or trace input images.
-    """
+    """Export caller-supplied circles as native DXF CIRCLE entities."""
     if units not in (1, 4):
         raise ValueError("Select inches (1) or millimeters (4) explicitly.")
     if not circles:
@@ -31,7 +33,7 @@ def export_circles(circles: list[Circle], *, units: int, version: str = "R2000")
     doc.units = units
     space = doc.modelspace()
     for circle in circles:
-        if not all(math.isfinite(v) for v in (circle.x, circle.y, circle.radius)):
+        if not all(math.isfinite(value) for value in (circle.x, circle.y, circle.radius)):
             raise ValueError("Circle geometry must be finite.")
         if circle.radius <= 0:
             raise ValueError("Circle radius must be positive.")
@@ -41,31 +43,87 @@ def export_circles(circles: list[Circle], *, units: int, version: str = "R2000")
     return output.getvalue()
 
 
+def _point(value, *, scale: float, source_height: int) -> tuple[float, float]:
+    return float(value.x) * scale, (source_height - float(value.y)) * scale
+
+
+def _to_dxf_paths(loop: PathLoop, result: VectorizationResult) -> list[DXFPath]:
+    source = SVGPath(loop.svg_path)
+    scale = result.output_width / result.source_width
+    paths: list[DXFPath] = []
+    current: DXFPath | None = None
+
+    def ensure_path(start) -> DXFPath:
+        nonlocal current
+        if current is None:
+            current = DXFPath(_point(start, scale=scale, source_height=result.source_height))
+        return current
+
+    for segment in source:
+        if isinstance(segment, Move):
+            if current is not None and len(current):
+                paths.append(current)
+            current = DXFPath(_point(segment.end, scale=scale, source_height=result.source_height))
+        elif isinstance(segment, Close):
+            if current is not None:
+                current.close()
+        elif isinstance(segment, CubicBezier):
+            path = ensure_path(segment.start)
+            path.curve4_to(
+                _point(segment.end, scale=scale, source_height=result.source_height),
+                _point(segment.control1, scale=scale, source_height=result.source_height),
+                _point(segment.control2, scale=scale, source_height=result.source_height),
+            )
+        elif isinstance(segment, QuadraticBezier):
+            path = ensure_path(segment.start)
+            path.curve3_to(
+                _point(segment.end, scale=scale, source_height=result.source_height),
+                _point(segment.control, scale=scale, source_height=result.source_height),
+            )
+        elif isinstance(segment, Arc):
+            path = ensure_path(segment.start)
+            for curve in segment.as_cubic_curves():
+                path.curve4_to(
+                    _point(curve.end, scale=scale, source_height=result.source_height),
+                    _point(curve.control1, scale=scale, source_height=result.source_height),
+                    _point(curve.control2, scale=scale, source_height=result.source_height),
+                )
+        elif isinstance(segment, Line):
+            path = ensure_path(segment.start)
+            path.line_to(_point(segment.end, scale=scale, source_height=result.source_height))
+
+    if current is not None and len(current):
+        paths.append(current)
+    return paths
+
+
 def export_dxf(result: VectorizationResult, *, version: str = "R2000") -> bytes:
-    """Export traced region loops as closed DXF polylines."""
+    """Export traced Bezier paths as native DXF SPLINE and POLYLINE entities."""
     if not result.regions:
         raise ValueError("At least one traced region is required.")
-    units = 4 if result.units == "mm" else 1
+    if version == "R12":
+        raise ValueError("Native spline export requires DXF R2000 or newer.")
     doc = ezdxf.new(version)
-    doc.units = units
+    doc.units = 4 if result.units == "mm" else 1
     space = doc.modelspace()
     for region in result.regions:
         if region.layer_name not in doc.layers:
             doc.layers.add(region.layer_name, color=7)
         for loop in region.loops:
-            entity = space.add_lwpolyline(
-                loop.points,
-                close=True,
+            entities = render_splines_and_polylines(
+                space,
+                _to_dxf_paths(loop, result),
                 dxfattribs={"layer": region.layer_name},
             )
-            entity.rgb = region.color
+            for entity in entities:
+                entity.rgb = region.color
     output = StringIO()
     doc.write(output)
     return output.getvalue().encode("utf-8")
 
 
 def export_svg(result: VectorizationResult) -> bytes:
-    """Export traced region loops as closed SVG paths in physical units."""
+    """Export traced paths without flattening their SVG curve commands."""
     if not result.regions:
         raise ValueError("At least one traced region is required.")
     namespace = "http://www.w3.org/2000/svg"
@@ -78,21 +136,22 @@ def export_svg(result: VectorizationResult) -> bytes:
             "viewBox": f"0 0 {result.output_width:.6g} {result.output_height:.6g}",
         },
     )
+    scale = result.output_width / result.source_width
+    drawing = ElementTree.SubElement(
+        root, f"{{{namespace}}}g", {"transform": f"scale({scale:.12g})"}
+    )
     for region in result.regions:
         red, green, blue = region.color
         group = ElementTree.SubElement(
-            root,
+            drawing,
             f"{{{namespace}}}g",
-            {"id": region.layer_name, "stroke": f"#{red:02x}{green:02x}{blue:02x}"},
+            {
+                "id": region.layer_name,
+                "fill": "none",
+                "stroke": f"#{red:02x}{green:02x}{blue:02x}",
+                "stroke-width": f"{0.2 / scale:.12g}",
+            },
         )
         for loop in region.loops:
-            points = " ".join(
-                f"{'M' if index == 0 else 'L'} {x:.6g} {result.output_height - y:.6g}"
-                for index, (x, y) in enumerate(loop.points)
-            )
-            ElementTree.SubElement(
-                group,
-                f"{{{namespace}}}path",
-                {"d": f"{points} Z", "fill": "none", "stroke-width": "0.2"},
-            )
+            ElementTree.SubElement(group, f"{{{namespace}}}path", {"d": loop.svg_path})
     return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)

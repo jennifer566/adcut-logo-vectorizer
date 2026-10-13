@@ -1,72 +1,95 @@
 # Adcut Logo Vectorizer
 
-UNC COMP 523 Team E. Development build established October 4, 2026.
+UNC COMP 523 Team E development repository.
 
 ## Current status
 
-This repository contains a runnable first image-to-CAD workflow. The Streamlit interface accepts JPEG, PNG, WEBP, GIF, and PDF files, reduces colors, traces closed foreground regions, applies an explicit physical width, previews detected boundaries, and exports SVG or DXF. The earlier native-circle exporter and its tests remain available.
+The repository contains a runnable image-to-CAD workflow. The Streamlit interface accepts JPEG, PNG, WEBP, GIF, and PDF files, traces color regions into SVG curves, applies an explicit physical width, previews the vector result, and exports SVG or DXF R2000.
 
-The current image tracer exports closed polylines. Native circle/arc fitting and shared-edge deduplication are not implemented yet, so every conversion displays warnings. No AutoCAD, IGEMS, machine compatibility, or cutting tests have been completed. Do not send unvalidated output to cutting equipment.
+VTracer now performs the raster-to-vector stage in spline mode. SVG cubic Bezier paths are preserved as native DXF `SPLINE` entities instead of being flattened into many short line segments. Pillow is used only to decode and normalize uploads; it does not trace the logo.
 
-## Selected starting platform
+Native circle and circular-arc recognition, shared-edge deduplication, and manual path editing are not complete. AutoCAD, IGEMS, machine compatibility, and physical cutting tests are also still required. Do not send unvalidated output to cutting equipment.
 
-- Python 3.11, VS Code, Git/GitHub.
-- Streamlit for a local browser interface on Windows.
-- Pillow for image decoding; OpenCV and NumPy for color segmentation and contours.
-- ezdxf for DXF entities and serialization.
-- pypdfium2 for later PDF raster import. Preserve vector PDF geometry where feasible after sample review.
-- pytest and Ruff for tests and formatting; pre-commit for local checks.
+## Platform
 
-Local processing is the initial deployment choice to keep installation and data flow simple. The client permits cloud deployment, which remains a future option. A local Streamlit app needs a running Python process but does not require a hosted service. Installation may need internet access. PyInstaller packaging is deferred until the basic workflow is validated.
+- Python 3.11 through 3.13
+- Streamlit for the local browser interface
+- VTracer for color segmentation and SVG spline tracing
+- svgelements for structured SVG path parsing
+- ezdxf for native DXF curves, layers, units, and serialization
+- Pillow for upload decoding and pypdfium2 for first-page PDF rasterization
+- uv for Python versions, dependency resolution, lockfile management, and commands
+- pytest, Ruff, and pre-commit for verification
 
-React/Vue would offer more editing control but add a separate frontend and API. Potrace/vtracer remain comparison candidates; raster tracing alone does not solve the native arc requirement. Native DWG export is not included. Validate a licensing-compatible approach before adding an external converter. Review dependencies and notices before distribution.
+The application processes files locally. Installation requires internet access to obtain dependencies, but normal use does not require a hosted service.
 
-## Windows setup
+## Setup with uv
 
-```powershell
-py -3.11 -m venv .venv
-.venv\Scripts\python -m pip install -e ".[dev]"
-.venv\Scripts\python -m pytest
-.venv\Scripts\pre-commit install
-.venv\Scripts\pre-commit install --hook-type commit-msg
-```
-
-The dependencies are bounded development ranges, not a reproducible release lock. Pin a tested environment before distribution.
-
-Run the application from the repository root:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), clone the repository, and run these commands from the repository root:
 
 ```powershell
-.venv\Scripts\streamlit run app.py
+uv sync --locked --dev
+uv run pytest
+uv run pre-commit install
+uv run pre-commit install --hook-type commit-msg
+uv run streamlit run app.py
 ```
 
-Then open the local address Streamlit prints, normally `http://localhost:8501`.
+Open the address Streamlit prints, normally `http://localhost:8501`. The same `uv` commands work in PowerShell, Command Prompt, macOS Terminal, and Linux shells.
 
-The original sample images in `examples/` are safe to publish and can be regenerated with `python scripts/create_samples.py`. The examples intentionally include adjacent regions and holes that expose known geometry limitations.
+`uv.lock` is committed so teammates and CI resolve the same package versions. Change dependencies with `uv add <package>` or `uv remove <package>`, then commit both `pyproject.toml` and `uv.lock`.
 
-## Collaboration
+## How vectorization works
 
-Use short-lived `feature/` branches and pull requests into `main`. Review changes with another teammate. Use conventional commits. CI runs tests and Ruff on Windows. Do not commit customer artwork without permission; `samples/private/` is ignored. Repository access must be granted to the actual teammate accounts.
+1. **Decode the upload.** Pillow reads JPEG, PNG, WEBP, and the first GIF frame. pypdfium2 renders the first PDF page. Transparency is composited onto white and the image is normalized to RGBA.
+2. **Trace to SVG curves.** The RGBA pixels are passed to VTracer in `spline` mode with `cutout` color hierarchy. VTracer clusters colors, removes small regions, fits curves, and returns SVG path data. OpenCV contours and Pillow polygon tracing are not used.
+3. **Keep closed color regions.** The SVG XML is parsed structurally. Closed paths are grouped by fill color, and the dominant border color can be omitted as background.
+4. **Preserve native geometry.** Cubic and quadratic SVG Bezier commands remain curves. The SVG download keeps the original path commands and adds physical dimensions.
+5. **Create CAD output.** SVG paths are parsed with svgelements, scaled to the requested inches or millimeters, flipped into CAD coordinates, and passed to ezdxf. Curved sections become native DXF `SPLINE` entities; straight sections remain polylines. Each detected color receives its own named layer.
+6. **Validate before fabrication.** The app reports region and curve counts, but exported files still require visual, scale, layer, and downstream software checks before cutting.
 
-## Next implementation tasks
+The curve simplification control is measured in source-image pixels. Larger values create fewer control points but can remove detail. The maximum-colors control limits VTracer's color clustering.
+
+## Tests and compatibility
+
+Run all checks locally with:
+
+```powershell
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
+```
+
+GitHub Actions runs the locked project on Windows, Linux, and macOS with Python 3.11, 3.12, and 3.13. The matrix catches operating-system and Python-version differences before changes are merged.
+
+The original sample images in `examples/` are safe to publish and can be regenerated with `uv run python scripts/create_samples.py`. They include adjacent regions, holes, and curves that expose known geometry limitations.
+
+## Collaboration and tracking
+
+Use short-lived `feature/` branches and pull requests into `main`. Review changes with another teammate and use conventional commit messages. Work is tracked in the repository's GitHub Project board. Do not commit customer artwork without permission; `samples/private/` is ignored.
+
+## Next validation tasks
 
 1. Obtain representative source files and accepted CAD output with permission to use them.
-2. Confirm DXF version, units, scale, layers, arc conventions, and target AutoCAD/IGEMS versions.
-3. Validate the current upload, color reduction, tracing, preview, SVG, and DXF workflow against permitted client samples.
-4. Fit circles/arcs with an agreed tolerance; preserve holes and avoid duplicate cut paths.
-5. Decide how users should control color reduction after testing real artwork.
-6. Test scale, native entity counts, and import into the actual downstream tools.
-7. Evaluate PDF region selection and DWG only after confirming priority and feasibility.
+2. Confirm DXF version, units, scale, layers, curve conventions, and target AutoCAD/IGEMS versions.
+3. Validate the SVG-first workflow against permitted client samples.
+4. Recognize exact circles and circular arcs where tolerance allows.
+5. Preserve holes and remove duplicate shared cut edges.
+6. Add review and correction controls after observing the client's workflow.
+7. Test scale, native entity counts, imports, and cuts in the downstream toolchain.
 
-Success requires an image-to-DXF workflow accepted by Adcut, not just a syntactically valid file. Do not run unvalidated output on cutting equipment.
+Success requires an image-to-DXF workflow accepted by Adcut, not just a syntactically valid file.
 
 Project website: https://jennifer566.github.io/adcut-logo-vectorizer-site/
 
 ## References
 
-- https://docs.streamlit.io/get-started/installation
-- https://docs.opencv.org/4.x/d4/d73/tutorial_py_contours_begin.html
-- https://ezdxf.readthedocs.io/en/stable/
+- https://docs.astral.sh/uv/
+- https://github.com/visioncortex/vtracer
+- https://github.com/meerk40t/svgelements
+- https://ezdxf.readthedocs.io/en/stable/path.html
+- https://docs.streamlit.io/
 - https://pypdfium2.readthedocs.io/en/stable/
-- https://identity.unc.edu/resources/downloads/ (optional approved university-brand test source; usage restrictions apply)
+- https://identity.unc.edu/resources/downloads/
 
-The application uses these projects through their published packages and APIs. No source code has been copied from another vectorizer. Potrace and vtracer remain evaluation candidates for later comparison against the project's CAD-geometry requirements.
+The application uses these projects through their published packages and APIs. No source code has been copied from another vectorizer.

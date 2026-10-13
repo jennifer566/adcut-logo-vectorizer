@@ -20,12 +20,12 @@ with st.sidebar:
     units = st.segmented_control("Units", options=["in", "mm"], default="in")
     color_count = st.slider("Maximum colors", min_value=2, max_value=12, value=4)
     simplification = st.slider(
-        "Polyline simplification",
+        "Curve simplification (pixels)",
         min_value=0.0,
-        max_value=0.02,
-        value=0.002,
-        step=0.001,
-        format="%.3f",
+        max_value=5.0,
+        value=1.5,
+        step=0.25,
+        format="%.2f",
     )
     ignore_border = st.checkbox("Ignore the dominant border color", value=True)
 
@@ -68,14 +68,15 @@ except VectorizationError as exc:
     st.stop()
 
 with right:
-    st.subheader("Traced boundaries")
-    st.image(result.preview_png, use_container_width=True)
+    st.subheader("SVG curve preview")
+    st.image(result.preview_svg, use_container_width=True)
 
-metric_columns = st.columns(4)
+metric_columns = st.columns(5)
 metric_columns[0].metric("Color regions", len(result.regions))
 metric_columns[1].metric("Closed paths", result.path_count)
-metric_columns[2].metric("Output width", f"{result.output_width:.3g} {result.units}")
-metric_columns[3].metric("Output height", f"{result.output_height:.3g} {result.units}")
+metric_columns[2].metric("Curve segments", result.curve_segment_count)
+metric_columns[3].metric("Output width", f"{result.output_width:.3g} {result.units}")
+metric_columns[4].metric("Output height", f"{result.output_height:.3g} {result.units}")
 
 for warning in result.warnings:
     st.warning(warning)
