@@ -5,7 +5,7 @@ from io import BytesIO
 import streamlit as st
 from PIL import Image, UnidentifiedImageError
 
-from adcut.export import export_dxf, export_svg
+from adcut.export import export_dxf, export_report, export_svg
 from adcut.pipeline import VectorizationError, VectorizationOptions, vectorize_image
 from adcut.presentation import svg_data_uri
 
@@ -91,7 +91,8 @@ for warning in result.warnings:
 
 dxf = export_dxf(result)
 svg = export_svg(result)
-download_columns = st.columns(2)
+report = export_report(result)
+download_columns = st.columns(3)
 download_columns[0].download_button(
     "Download DXF",
     data=dxf,
@@ -104,5 +105,12 @@ download_columns[1].download_button(
     data=svg,
     file_name="adcut-vectorized.svg",
     mime="image/svg+xml",
+    width="stretch",
+)
+download_columns[2].download_button(
+    "Download report",
+    data=report,
+    file_name="adcut-vectorization-report.json",
+    mime="application/json",
     width="stretch",
 )

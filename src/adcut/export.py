@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from io import StringIO
@@ -155,3 +156,46 @@ def export_svg(result: VectorizationResult) -> bytes:
         for loop in region.loops:
             ElementTree.SubElement(group, f"{{{namespace}}}path", {"d": loop.svg_path})
     return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def export_report(result: VectorizationResult) -> bytes:
+    """Export the source identity, settings, geometry summary, and warnings as JSON."""
+    report = {
+        "schema_version": 1,
+        "source": {
+            "filename": result.source_filename,
+            "sha256": result.source_sha256,
+            "width_pixels": result.source_width,
+            "height_pixels": result.source_height,
+        },
+        "settings": {
+            "output_width": result.options.output_width,
+            "units": result.options.units,
+            "maximum_colors": result.options.color_count,
+            "curve_simplification_pixels": result.options.simplification,
+            "minimum_area_pixels": result.options.minimum_area,
+            "ignore_dominant_border_color": result.options.ignore_border_color,
+        },
+        "output": {
+            "width": result.output_width,
+            "height": result.output_height,
+            "units": result.units,
+            "region_count": len(result.regions),
+            "closed_path_count": result.path_count,
+            "curve_segment_count": result.curve_segment_count,
+            "line_segment_count": result.line_segment_count,
+            "regions": [
+                {
+                    "identifier": region.identifier,
+                    "layer": region.layer_name,
+                    "color": "#" + "".join(f"{channel:02X}" for channel in region.color),
+                    "closed_path_count": len(region.loops),
+                    "curve_segment_count": sum(loop.curve_segments for loop in region.loops),
+                    "line_segment_count": sum(loop.line_segments for loop in region.loops),
+                }
+                for region in result.regions
+            ],
+        },
+        "warnings": list(result.warnings),
+    }
+    return (json.dumps(report, indent=2, sort_keys=True) + "\n").encode("utf-8")

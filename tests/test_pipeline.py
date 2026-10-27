@@ -1,3 +1,5 @@
+import hashlib
+import json
 from io import BytesIO, StringIO
 
 import ezdxf
@@ -7,7 +9,7 @@ from svgelements import Close
 from svgelements import Path as SVGPath
 
 from adcut import pipeline
-from adcut.export import export_dxf, export_svg
+from adcut.export import export_dxf, export_report, export_svg
 from adcut.pipeline import VectorizationError, VectorizationOptions, vectorize_image
 
 
@@ -63,6 +65,27 @@ def test_svg_uses_physical_dimensions_and_closed_paths():
         for region in result.regions
         for loop in region.loops
     )
+
+
+def test_report_records_source_settings_geometry_and_warnings():
+    source = sample_png()
+    result = vectorize_image(source, filename="folder/sample.png", options=options())
+
+    report = json.loads(export_report(result))
+
+    assert report["schema_version"] == 1
+    assert report["source"] == {
+        "filename": "sample.png",
+        "sha256": hashlib.sha256(source).hexdigest(),
+        "width_pixels": 200,
+        "height_pixels": 100,
+    }
+    assert report["settings"]["maximum_colors"] == 3
+    assert report["settings"]["curve_simplification_pixels"] == 1.5
+    assert report["output"]["width"] == 20
+    assert report["output"]["closed_path_count"] == result.path_count
+    assert report["output"]["regions"][0]["layer"].startswith("REGION_")
+    assert report["warnings"] == list(result.warnings)
 
 
 def test_r12_is_rejected_because_it_cannot_preserve_native_splines():

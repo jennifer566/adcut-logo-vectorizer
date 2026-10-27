@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections import Counter
 from dataclasses import dataclass
@@ -66,6 +67,8 @@ class ColorRegion:
 
 @dataclass(frozen=True)
 class VectorizationResult:
+    source_filename: str
+    source_sha256: str
     source_width: int
     source_height: int
     output_width: float
@@ -74,6 +77,7 @@ class VectorizationResult:
     regions: tuple[ColorRegion, ...]
     preview_svg: bytes
     warnings: tuple[str, ...]
+    options: VectorizationOptions
 
     @property
     def path_count(self) -> int:
@@ -261,6 +265,8 @@ def vectorize_image(
         warnings.append("Only the first GIF frame is processed in this version.")
 
     return VectorizationResult(
+        source_filename=Path(filename).name,
+        source_sha256=hashlib.sha256(data).hexdigest(),
         source_width=image.width,
         source_height=image.height,
         output_width=options.output_width,
@@ -269,4 +275,5 @@ def vectorize_image(
         regions=regions,
         preview_svg=traced_svg.encode("utf-8"),
         warnings=tuple(warnings),
+        options=options,
     )

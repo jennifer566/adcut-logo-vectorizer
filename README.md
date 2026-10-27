@@ -4,7 +4,7 @@ UNC COMP 523 Team E development repository.
 
 ## Current status
 
-The repository contains a runnable image-to-CAD workflow. The Streamlit interface accepts JPEG, PNG, WEBP, GIF, and PDF files, traces color regions into SVG curves, applies an explicit physical width, previews the vector result, and exports SVG or DXF R2000.
+The repository contains a runnable image-to-CAD workflow. The Streamlit interface accepts JPEG, PNG, WEBP, GIF, and PDF files, traces color regions into SVG curves, applies an explicit physical width, previews the vector result, and exports SVG, DXF R2000, and a JSON conversion report.
 
 VTracer now performs the raster-to-vector stage in spline mode. SVG cubic Bezier paths are preserved as native DXF `SPLINE` entities instead of being flattened into many short line segments. Pillow is used only to decode and normalize uploads; it does not trace the logo.
 
@@ -47,6 +47,8 @@ Open the address Streamlit prints, normally `http://localhost:8501`. The same `u
 4. **Preserve native geometry.** Cubic and quadratic SVG Bezier commands remain curves. The SVG download keeps the original path commands and adds physical dimensions.
 5. **Create CAD output.** SVG paths are parsed with svgelements, scaled to the requested inches or millimeters, flipped into CAD coordinates, and passed to ezdxf. Curved sections become native DXF `SPLINE` entities; straight sections remain polylines. Each detected color receives its own named layer.
 6. **Validate before fabrication.** The app reports region and curve counts, but exported files still require visual, scale, layer, and downstream software checks before cutting.
+
+The JSON conversion report records the source filename and SHA-256 hash, vectorization settings, physical dimensions, warnings, and per-layer geometry counts. Keep it with the corresponding SVG and DXF so another person can identify and repeat the conversion.
 
 The curve simplification control is measured in source-image pixels. Larger values create fewer control points but can remove detail. The maximum-colors control limits VTracer's color clustering.
 
