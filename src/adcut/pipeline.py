@@ -14,6 +14,9 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from svgelements import Arc, Close, CubicBezier, Line, QuadraticBezier
 from svgelements import Path as SVGPath
 
+MAX_INPUT_BYTES = 25 * 1024 * 1024
+MAX_SOURCE_PIXELS = 40_000_000
+
 
 class VectorizationError(ValueError):
     """Raised when an input cannot produce usable vector geometry."""
@@ -103,15 +106,19 @@ def decode_image(data: bytes, filename: str = "") -> Image.Image:
     """Decode input to RGBA; Pillow normalizes formats but does not trace paths."""
     if not data:
         raise VectorizationError("Choose a non-empty image file.")
+    if len(data) > MAX_INPUT_BYTES:
+        raise VectorizationError("The selected file exceeds the 25 MB upload limit.")
 
     suffix = Path(filename).suffix.lower()
     try:
         image = _decode_pdf(data) if suffix == ".pdf" else Image.open(BytesIO(data))
         image.seek(0)
+        if image.width * image.height > MAX_SOURCE_PIXELS:
+            raise VectorizationError("The decoded image exceeds the 40-megapixel processing limit.")
         rgba = ImageOps.exif_transpose(image).convert("RGBA")
     except VectorizationError:
         raise
-    except (UnidentifiedImageError, OSError, ValueError) as exc:
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as exc:
         raise VectorizationError("The selected file is not a readable image.") from exc
 
     background = Image.new("RGBA", rgba.size, "white")

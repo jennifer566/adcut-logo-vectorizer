@@ -33,7 +33,7 @@ with st.sidebar:
 uploaded = st.file_uploader(
     "Choose artwork",
     type=["jpg", "jpeg", "png", "webp", "gif", "pdf"],
-    help="PDF and GIF currently use the first page or frame.",
+    help="Maximum 25 MB and 40 megapixels. PDF and GIF use the first page or frame.",
 )
 
 if uploaded is None:

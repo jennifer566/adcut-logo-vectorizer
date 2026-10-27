@@ -89,6 +89,20 @@ def test_unreadable_image_is_rejected():
         vectorize_image(b"not an image", filename="bad.png", options=options())
 
 
+def test_oversized_upload_is_rejected_before_decoding(monkeypatch):
+    monkeypatch.setattr(pipeline, "MAX_INPUT_BYTES", 4)
+
+    with pytest.raises(VectorizationError, match="25 MB upload limit"):
+        vectorize_image(b"12345", filename="sample.png", options=options())
+
+
+def test_large_decoded_image_is_rejected(monkeypatch):
+    monkeypatch.setattr(pipeline, "MAX_SOURCE_PIXELS", 100)
+
+    with pytest.raises(VectorizationError, match="40-megapixel processing limit"):
+        vectorize_image(sample_png(), filename="sample.png", options=options())
+
+
 def test_region_identifiers_are_stable_when_tracer_order_changes(monkeypatch):
     paths = {
         "red": '<path fill="#ff0000" d="M0 0 L10 0 L10 10 Z"/>',
