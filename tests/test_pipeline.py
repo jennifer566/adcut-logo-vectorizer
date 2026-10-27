@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw
 from svgelements import Close
 from svgelements import Path as SVGPath
 
+from adcut import pipeline
 from adcut.export import export_dxf, export_svg
 from adcut.pipeline import VectorizationError, VectorizationOptions, vectorize_image
 
@@ -86,3 +87,31 @@ def test_invalid_options_are_rejected(overrides, message):
 def test_unreadable_image_is_rejected():
     with pytest.raises(VectorizationError, match="not a readable image"):
         vectorize_image(b"not an image", filename="bad.png", options=options())
+
+
+def test_region_identifiers_are_stable_when_tracer_order_changes(monkeypatch):
+    paths = {
+        "red": '<path fill="#ff0000" d="M0 0 L10 0 L10 10 Z"/>',
+        "blue": '<path fill="#0000ff" d="M20 0 L30 0 L30 10 Z"/>',
+    }
+
+    def result_for(order):
+        svg = f'<svg xmlns="http://www.w3.org/2000/svg">{order}</svg>'
+        monkeypatch.setattr(pipeline, "_trace_svg", lambda image, settings: svg)
+        return vectorize_image(
+            sample_png(),
+            filename="sample.png",
+            options=options(ignore_border_color=False),
+        )
+
+    first = result_for(paths["red"] + paths["blue"])
+    second = result_for(paths["blue"] + paths["red"])
+
+    assert [(region.identifier, region.color) for region in first.regions] == [
+        (1, (0, 0, 255)),
+        (2, (255, 0, 0)),
+    ]
+    assert [(region.identifier, region.color) for region in second.regions] == [
+        (1, (0, 0, 255)),
+        (2, (255, 0, 0)),
+    ]

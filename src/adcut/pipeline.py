@@ -223,7 +223,7 @@ def _regions_from_svg(
 
     return tuple(
         ColorRegion(identifier=index, color=color, loops=tuple(loops))
-        for index, (color, loops) in enumerate(grouped.items(), start=1)
+        for index, (color, loops) in enumerate(sorted(grouped.items()), start=1)
         if loops
     )
 
