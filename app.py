@@ -7,6 +7,7 @@ from PIL import Image, UnidentifiedImageError
 
 from adcut.export import export_dxf, export_svg
 from adcut.pipeline import VectorizationError, VectorizationOptions, vectorize_image
+from adcut.presentation import svg_data_uri
 
 st.set_page_config(page_title="Adcut Logo Vectorizer", page_icon="✂", layout="wide")
 st.title("Adcut Logo Vectorizer")
@@ -45,7 +46,7 @@ with left:
     st.subheader("Source")
     try:
         if not uploaded.name.lower().endswith(".pdf"):
-            st.image(Image.open(BytesIO(data)), use_container_width=True)
+            st.image(Image.open(BytesIO(data)), width="stretch")
         else:
             st.write("PDF selected. The first page will be rasterized during conversion.")
     except (OSError, UnidentifiedImageError):
@@ -69,7 +70,14 @@ except VectorizationError as exc:
 
 with right:
     st.subheader("SVG curve preview")
-    st.image(result.preview_svg, use_container_width=True)
+    st.markdown(
+        (
+            '<img src="'
+            f"{svg_data_uri(result.preview_svg)}"
+            '" alt="Vectorized SVG preview" style="display:block;width:100%;height:auto;">'
+        ),
+        unsafe_allow_html=True,
+    )
 
 metric_columns = st.columns(5)
 metric_columns[0].metric("Color regions", len(result.regions))
@@ -89,12 +97,12 @@ download_columns[0].download_button(
     data=dxf,
     file_name="adcut-vectorized.dxf",
     mime="application/dxf",
-    use_container_width=True,
+    width="stretch",
 )
 download_columns[1].download_button(
     "Download SVG",
     data=svg,
     file_name="adcut-vectorized.svg",
     mime="image/svg+xml",
-    use_container_width=True,
+    width="stretch",
 )
