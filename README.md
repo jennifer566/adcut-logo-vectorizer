@@ -66,7 +66,7 @@ The original sample images in `examples/` are safe to publish and can be regener
 
 ## Collaboration and tracking
 
-Use short-lived `feature/` branches and pull requests into `main`. Review changes with another teammate and use conventional commit messages. Work is tracked on the [Adcut Logo Vectorizer Development Kanban board](https://github.com/users/jennifer566/projects/3). Do not commit customer artwork without permission; `samples/private/` is ignored.
+Use short-lived `feature/` branches and pull requests into `main`. Follow the [contributing guide](CONTRIBUTING.md): each commit should contain one fix, feature, refactor, test-only change, or documentation change. Review changes with another teammate and use conventional commit messages. Work is tracked on the [Adcut Logo Vectorizer Development Kanban board](https://github.com/users/jennifer566/projects/3). Do not commit customer artwork without permission; `samples/private/` is ignored.
 
 ## Next validation tasks
 
