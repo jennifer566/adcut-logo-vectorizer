@@ -12,7 +12,7 @@ from xml.etree import ElementTree
 
 import vtracer
 from PIL import Image, ImageOps, UnidentifiedImageError
-from svgelements import Arc, Close, CubicBezier, Line, QuadraticBezier, Matrix
+from svgelements import Arc, Close, CubicBezier, Line, Matrix, QuadraticBezier
 from svgelements import Path as SVGPath
 
 MAX_INPUT_BYTES = 25 * 1024 * 1024
