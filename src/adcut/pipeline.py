@@ -12,7 +12,7 @@ from xml.etree import ElementTree
 
 import vtracer
 from PIL import Image, ImageOps, UnidentifiedImageError
-from svgelements import Arc, Close, CubicBezier, Line, QuadraticBezier
+from svgelements import Arc, Close, CubicBezier, Line, QuadraticBezier, Matrix
 from svgelements import Path as SVGPath
 
 MAX_INPUT_BYTES = 25 * 1024 * 1024
@@ -228,6 +228,12 @@ def _regions_from_svg(
             continue
         if background_color is not None and _is_close_color(color, background_color):
             continue
+
+        transform = element.get("transform")
+
+        if transform:
+            path_data = abs(SVGPath(path_data) * Matrix(transform)).d()
+
         loop = _describe_path(path_data)
         if loop.is_closed:
             grouped.setdefault(color, []).append(loop)
